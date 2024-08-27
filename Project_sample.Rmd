@@ -577,41 +577,6 @@ Aanvullende vraagstukken voor nader onderzoek zijn de bereikbaarheid van standpu
 
 
 
-
-
-
-```{r lm niet af, include=FALSE}
-
-# sbt <- sector_prov %>% select(-c(aanrijtijd, ambulances, inzetten, standplaatsen))%>%
-#   rename_at(vars(contains('groei')), ~ gsub('groei ', '', .))%>%
-#   select(aanrijtijd, ambulances, inzetten, standplaatsen, Provincie, landdeel, jaar)%>%ungroup
-# 
-# 
-# library(GGally)
-# ggpairs(sbt%>%select(!c(Provincie, landdeel)))
-# 
-# 
-# df <- sbt%>%
-#   mutate_at(vars(jaar, Provincie, landdeel), as.factor)
-# 
-# library(lme4)
-# 
-# # Fitting a multilevel model
-# model <- lmer(aanrijtijd ~ inzetten + standplaatsen + ambulances + (1 | Provincie) + (jaar), data = df)
-# 
-# # Install and load sjPlot if you haven't already
-# #install.packages("sjPlot")
-# library(sjPlot)
-# 
-# # Visualizing fixed effects
-# plot_model(model, type = "est", show.values = TRUE, show.p = TRUE, title = "Fixed Effects Estimates")
-# 
-# 
-# plot_model(model, type = "resid", show.values = TRUE, show.p = TRUE, title = "Fixed Effects Estimates")
-
- 
-```
-
 ```{r turn on warnings and messages, include= FALSE}
 knitr::opts_chunk$set(message = TRUE, warning = TRUE, include = FALSE)
 ```
