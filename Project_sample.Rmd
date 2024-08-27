@@ -1,0 +1,620 @@
+---
+title: "Devise case"
+author: ''
+output:
+  pdf_document: default
+  html_document: default
+  header-includes:
+   - \usepackage{lmodern} % Use the Latin Modern font family
+   - \renewcommand{\rmdefault}{lmss} % Use sans-serif as default font
+---
+
+```{r dependencies, include=FALSE, warning= FALSE, message= FALSE}
+#dependencies
+
+
+# Git HUB connectie naar private repository configureren voor csv, png en pdf data bronnen
+
+repos <- "https://raw.githubusercontent.com/AndySibov/devise/main/"
+
+# tijdelijke token om de repos te kunnen betreden
+token <- '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'
+
+# Function to get files from GitHub and return their contents
+load_git_files <- function(repos, filenames, token = NULL, invisible = TRUE, csv_delimiter = NULL) {
+  
+  #standaard delimiter instellen
+  if(is.null(csv_delimiter)) csv_delimiter <- ';'
+  
+  # Functie om verschillende files te kunnen lezen
+  read_common_file <- function(file_path, delimit = csv_delimiter) {
+    file_ext <- file_ext(file_path)
+    
+    # Switch op file extension
+    switch(file_ext,
+           csv = read_delim(file_path, delim = delimit),   # Use separator if provided
+           tsv = read_delim(file_path), 
+           rds = read_rds(file_path),
+           str_c(file_ext, ' is not supported')
+    )
+  }
+  
+         
+  
+  # Functie om 1 file te kunnen lezen
+  process_file <- function(filename) {
+    # Encoden URL
+    encoded_filename <- URLencode(filename)
+    
+    # Defineer URL
+    url <- str_c(repos, encoded_filename)
+    
+    # GET request
+    if (!is.null(token)) {
+      request <- GET(url, add_headers(Authorization = paste("token", token)))
+    } else {
+      request <- GET(url)
+    }
+    
+    # Opslaan in een tijdelijke folder
+    temp_file <- tempfile(fileext = str_c(".", sub(".*\\.", "", filename)))
+    writeBin(content(request, "raw"), temp_file)
+    
+    # Inlezen van de tijdelijk opgeslagen file
+    return(read_common_file(temp_file))
+  }
+  
+  # Map the process file functie op de filenames argument
+  if(invisible) {
+    results <- map(filenames, process_file) %>% invisible() %>% suppressMessages()
+  } else {
+    results <- map(filenames, process_file)
+  }
+  
+  names(results) <- filenames
+  
+  # Unlisten alse er maar 1 file is
+  if (length(filenames) == 1) {
+    return(results[[1]])
+  } else {
+    return(results)
+  }
+}
+
+
+
+# Functie om files op te slaan van GitHub naar een toegekende locatie
+save_git_files <- function(repos, filenames, token = NULL, save_dir = tempdir()) {
+  
+  # Check of de directory bestaat, ander aanmaken
+  if (!dir.exists(save_dir)) {
+    dir.create(save_dir, recursive = TRUE)
+  }
+  
+  # Functie om 1 file te kunnen uitlezen
+  process_file <- function(filename) {
+    # Encode URL
+    encoded_filename <- URLencode(filename)
+    
+    # Defineer URL
+    url <- str_c(repos, encoded_filename)
+    
+    # GET request
+    if (!is.null(token)) {
+      request <- GET(url, add_headers(Authorization = paste("token", token)))
+    } else {
+      request <- GET(url)
+    }
+    
+    # Check of the GET request goed is gegaan
+    if (status_code(request) == 200) {
+      # Opslaan van de file met de originele naam in de aangegeven directory
+      save_path <- file.path(save_dir, filename)
+      writeBin(content(request, "raw"), save_path)
+      message("File saved to: ", save_path)
+    } else {
+      stop("Failed to download file. HTTP status code: ", status_code(request))
+    }
+  }
+  
+  # map de functie over de filenames
+  walk(filenames, process_file)
+
+}
+
+
+#functie om packages te installeren als ze nog niet zijn geinstalleerd
+
+check_and_install_packages <- function(packages){
+  # index van niet geinstalleerde packes vinden
+  logical_index <- unlist(lapply(packages, function(x)requireNamespace(x, quietly = TRUE)))
+  
+  #filter de lijst
+  uninstalled <- packages[!logical_index]
+  
+  #installeer
+  if(length(uninstalled)>0){
+    install.packages(uninstalled)
+  }
+}
+
+#benodigde packages
+pkgs <- c('tidyverse', 'readr', 'forcats', 'ggplot2', 'sf', 'cbsodataR', 'stringr', 'rlang','viridisLite', 'httr', 'RColorBrewer', 'purrr', 'readr', 'tools', 'scales')
+
+# exe
+check_and_install_packages(pkgs)
+
+library(tidyverse)
+library(readr)
+library(forcats)
+library(ggplot2)
+library(sf)
+library(cbsodataR)
+library(stringr)
+library(rlang)
+library(viridisLite)
+library(httr)
+library(knitr)
+library(RColorBrewer)
+library(purrr)
+library(readr)
+library(tools)
+library(scales)
+
+```
+
+```{r turn off warnings and messages, include= FALSE}
+# zorgen dat messages en warning niet in de knit komen
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+\begin{center}
+\LARGE \textbf{Rapport responstijden ambulance zorg 2005-2019}
+\end{center}
+
+### Stelling: De Nederlandse overheid merkt op dat de responstijden van ambulances in 2018 en 2019 een stuk lager waren dan daarvoor. Nu het verzoek om dit probleem te onderzoeken.
+
+# Samenvatting
+Snelle responstijden van ambulances zijn van hoog belang om acute zorg zo efficient mogelijk te laten verlopen. Een belangrijk onderscheid tussen responstijden en aanrijtijden, is dat de aanrijtijd een onderdeel is van de gehele reponstijd, zie onderstaande figuur. Om de ontwikkelingen te onderzoeken is er gekeken naar aanrijtijden van ambulances met data tussen 2005 en 2019. 
+De streefwaarde is om binnen 15 minuten aanweizg te zijn, deze richtlijn is door het **[RIVM](https://www.rivm.nl/bibliotheek/rapporten/270482001.pdf)** opgesteld in 2010.
+
+Er lijkt een herorganisatie te hebben plaatsgevonden tussen 2015 en 2017, waar een duidelijke toename van de gemiddelde aanrijtijd te zien is in Gelderland, Flevoland en Limburg, maar juist een afname in Zuid-Holland, Utrecht en Overijssel. Mogelijk zijn er in 2018 en 2019 meer dienstverleners in de ambulance zorg in dienst getreden, de provincies met een afname zijn in deze periode terug naar hun gemiddelde gegaan voor de herorganisatie, terwijl de toename in andere provincies zijn aangehouden. Andere ontwikkelen in ambulancezorg worden beschouwd met data van SectorKompas. 
+
+```{r overzicht ambulancezorg, echo= FALSE, out.width="100%"}
+
+chart_path <- tempdir()
+chart_name <- "process_flowchart.png"
+chart_filepath <- file.path(chart_path, chart_name)
+
+
+save_git_files(repos = repos, filenames = chart_name, save_dir = chart_path, token = token)
+
+#render de chart
+include_graphics(chart_filepath)
+```
+
+\newpage
+
+
+
+```{r load data from git, include= FALSE}
+
+filenames <- list('devise_case_1.csv','devise_case_2.csv')
+
+git_import <- load_git_files(repos, 
+                             filenames = filenames, 
+                             token = token)
+
+rawdata <- git_import[['devise_case_1.csv']]
+id_labels <- git_import[['devise_case_2.csv']]
+
+```
+
+
+```{r cleaning and formatting, include = FALSE}
+
+# opschonen: negatieve waarde op NA zetten; data uit colnames (dagdeel en jaar) formateren;  en labels toevoegen. 
+
+
+data <- rawdata%>%
+  
+  #transponeren
+  pivot_longer(cols = -id, names_to = 'dagdeel_jaar', values_to = 'aanrijtijd')%>%
+  
+  #dageel en jaar uit elkaar halen
+  separate('dagdeel_jaar', into = c('dagdeel', 'jaar'), sep = "_")%>%
+  
+  #labels formateren
+  mutate(
+    dagdeel = 
+      as.character(
+           fct_recode(dagdeel, 
+                      avond = 'a',
+                      dag = 'd',
+                      nacht = 'n')),
+    jaar = 
+      as.numeric(str_c('20',jaar))
+         )%>%
+  #voeg labels toe
+  left_join(id_labels) %>%
+  rename(Provincie = 'region')
+
+  
+data%>%
+ggplot(aes(x = jaar, y = aanrijtijd, col = dagdeel))+
+geom_line()+
+facet_wrap(~Provincie)+
+geom_hline(aes(yintercept = 15), lty = 2, alpha = .7)+
+labs(caption = "Geimputeerde data voor avond aanrijtijden, Utrecht 2015 & 2018*")+
+scale_color_manual(values = c('blue', 'orange', 'brown'), breaks=c('dag', 'avond', 'nacht'))+
+scale_x_continuous(labels = function(x) sprintf("%02d", x %% 100), breaks = c(2005,2009,2013,2017))+
+theme_bw()
+
+# Utrecht heeft twee negatieve waarde voor de avond in 2015 en 2018, als absolute waarde (positief) lijken ze plausibel en een herkenbare trend te volgen van andere provincies met dalingen
+# echter kan niet vast worden gesteld wat de oorzaak is van een negatieve waarde, zullen deze worden verwijderd en vervolgens imputed
+
+data <-
+  data %>%
+    replace(., . < 0, NA)
+
+
+```
+
+```{r impute missende waarde Utrecht, include= FALSE}
+
+
+# het lijkt er  op dat in 2015 een herorganisatie van de dienstverlening heeft plaatsgevonden; er zijn regio's met een sterke daling van aanrijtijd in de avond, en regio's met stijging in de nacht.
+
+#missende waarde
+notes_imp <- data%>%filter(is.na(aanrijtijd))%>%distinct(Provincie, dagdeel, jaar)
+
+
+# Utrecht heeft missende waarden in 2015 en 2018, maar heeft duidelijk een daling in 2016 en 2017.
+##we kunnen missing values interpoleren op basis van provincies die ook een daling in de avond in de periode vanaf 2015 ("Groningen", "Overijssel", "Zuid-Holland")
+
+
+#slope berekenen per dagdeel en jaar voor provincies die een daling hebben tussen 2015 en 2019
+
+slopes_prov_met_daling <-
+data%>%
+  #alleen data na 2014 meenemen, en alleen provincies met een zichtbare daling in       #aanrijtijd
+  filter(jaar >= 2014, 
+         Provincie %in% c("Groningen", "Overijssel", "Zuid-Holland"),
+         dagdeel == 'avond')%>%
+  
+  group_by(jaar, dagdeel)%>%
+  
+  summarise(gem_tijd = mean(aanrijtijd))%>%
+  
+  ungroup()%>%
+  
+  mutate(lag_slope = gem_tijd/lag(gem_tijd))
+
+#arrangeer data in de juiste volgorde voor imputatie: regio -> dagdeel -> jaar
+data_imp <- data %>%
+  left_join(slopes_prov_met_daling)%>%
+  #sorteren zodat de functie lag het vorige jaar pakt
+  arrange(Provincie, dagdeel, as.numeric(jaar))
+
+
+#index voor missende waarde
+index_na <- which(is.na(data_imp$aanrijtijd))
+
+#stapsgewijs met een for loop imputeren (met een gevectoriseerde methode blijven consecutieve NA's leeg)
+for(i in index_na){
+  data_imp$aanrijtijd[i] = data_imp$aanrijtijd[i-1] * data_imp$lag_slope[i]
+}
+
+#weghalen van onnodige variabelen
+data_imp <- data_imp %>%
+  select(!c(gem_tijd, lag_slope))
+
+```
+
+# Exploratieve analyse
+In deze dataset zijn de gemiddelde per regio, dagdeel en jaar geleverd. Hieronder is de data gevisualiseerd naar dagdeel en jaar. Alle punten representeren 1 gemiddelde van een provincie van 1 dagdeel in het desbetreffend jaar. Alle punten boven zwarte streeplijn vallen daarmee boven de streefwaarde van 15 miunten. 
+```{r gemiddelde per jaar, echo=FALSE}
+
+#overall gemiddelde; word gebruikt voor fading van geom_point
+grand_mean <- mean(data_imp$aanrijtijd)
+
+ data_imp %>%
+  group_by(jaar) %>% 
+  summarise(aanrijtijd = mean(aanrijtijd)) %>%
+  ggplot(aes(x = jaar, y = aanrijtijd)) +
+  
+  # Overall gemiddelde plotten 
+  geom_line(aes(col = "gemiddelde"), size = 1.5, alpha = .8) +
+  
+  # jitter plot voor 'avond' en 'nacht' (zonder 'dag')
+  geom_jitter(data = data_imp %>% filter(dagdeel != 'dag'), 
+              aes(x = jaar, y = aanrijtijd, col = dagdeel, alpha = abs(aanrijtijd - grand_mean)^2), 
+              size = .5, width = .2, height = 0, show.legend = FALSE) +
+  
+  # Add the mean lines voor dagdeel
+  geom_line(data = data_imp %>% group_by(jaar, dagdeel) %>% summarise(tijd = mean(aanrijtijd)),
+            aes(x = jaar, y = tijd, col = dagdeel), alpha = .8) +
+  
+  geom_hline(aes(yintercept = 15), lty = 2, alpha = .7) +
+  
+  # Defineer color scale
+  scale_color_manual(values = c("gemiddelde" = "black", "dag" = "orange", "avond" = "blue", "nacht" = "brown"),
+                     breaks = c("gemiddelde", "dag", "avond", "nacht")) +
+  
+  # Set y-axis limits
+  ylim(0, 25) +
+  
+  theme_bw() +
+  
+  scale_x_continuous(breaks = seq(2005, 2020, 2))+
+  
+  #  label voor color legend weghalen
+  labs(col = '', title = 'Gemiddelde aanrijtijd per dagdeel') +
+  
+  # point aesthetic weghalen uit de legend
+  guides(col = guide_legend(override.aes = list(size = .5, shape = NA)))
+
+
+
+ 
+```
+Er is een merkbare verlaging van de aanrijtijd vanaf 2018, wat ook bijdraagt aan een lagere reponsetijd. Aanrijtijden zijn overdag gemiddeld rond de 12,5 minuut, consistent over alle jaren heen. Tot aan 2014 zijn er geen verschillen in patronen te zien tussen de dagdelen avond en nacht. In 2015 stijgt de aanrijtijd sterk in de nacht, terwijl in de avond de aanrijtijden korter worden. Echter vlakken de stijgingen af naar het oude gemiddelde vanaf 2018, terwijl de snellere aanrijtijden aanhouden. 
+
+\newpage
+
+## Tijden per Provincie
+De prognose van de landelijke gemiddelde laten een gunstige prognose zien, op regionaal niveau is te zien welke provincies betrokken zijn. Voor 2014 zijn er geen merkwaardige veranderingen in aanrijden. Tussen 2015 en 2017 zijn er sterke schommelingen, welke na 2018 stabiliseren ten gunste van snellere aanrijtijden.
+```{r jaar_provincie, echo=FALSE}
+
+# facet order: Noord Midden en Zuid
+facet_order <- c("Friesland", 'Drenthe', 'Groningen', 'Overijssel', 'Noord-Holland', 'Flevoland', 'Gelderland', 'Utrecht', "Zuid-Holland", 'Brabant', 'Zeeland', 'Limburg')
+
+
+data_imp%>%
+ggplot(aes(x = jaar, y = aanrijtijd, col = dagdeel))+
+geom_line()+
+facet_wrap(~fct(Provincie, levels = facet_order))+
+geom_hline(aes(yintercept = 15), lty = 2, alpha = .7)+
+labs(caption = "Geimputeerde data voor avond aanrijtijden, Utrecht 2015 & 2018*\nRijen zijn gesorteerd in drie delen: Noord, Midden en Zuid",
+     title = "Gemiddelde aanrijtijden per provincie", col = '')+
+scale_color_manual(values = c('blue', 'orange', 'brown'), breaks=c('dag', 'avond', 'nacht'))+
+scale_x_continuous(labels = function(x) sprintf("%02d", x %% 100), breaks = c(2005,2009,2013,2017))+
+theme_bw()
+```
+\**geinterpoleerde data op basis andere provincies met dalingen van aanrijtijden in de avond tussen 2015-2019*
+
+
+Het lijkt erop dat er een grote herorganisatie plaats heeft gevonden vanaf 2015: Drenthe, Flevoland en Gelderland en Limburg hebben allemaal aanzienlijk tragere aanrijtijd in de jaren 2015 tot en met 2017. Tegelijkertijd hebben de provincies Groningen, Overijssel, Utrecht en Zuid-Holland in deze periode een snellere aanrijtijd. Een mogelijke verklaring is de herlocatie van personeel tussen provincies. In 2018 en 2019 stabiliseert de vertraagde aanrijtijd van de debetreffende provincies terug naar het voormalig gemiddelde, terwijl de snellere aanrijtijden in de avond aanhouden, aldus een winst.
+
+\newpage
+
+## Prognose per provincie en periode
+
+Tussen 2005 - 2014 zijn is er marginaal weinig veranderd in aanrijtijden, hieronder worden de afgelopen jaren er tegenover afgezet. Per periode worden de veranderingen ten opzichte van de vorige periode in minuten weergegeven (deze zijn naar beneden afgerond).
+
+```{r provincie labels kopppelen, include = FALSE}
+#haal GIS data op voor geospatial mapping
+
+url_provincies_st <- "https://service.pdok.nl/cbs/gebiedsindelingen/2024/wfs/v1_0?request=GetFeature&service=WFS&version=1.1.0&outputFormat=application%2Fjson&typeName=gebiedsindelingen:provincie_gegeneraliseerd"
+provincies <- st_read(url_provincies_st)
+
+#id's komen niet overeen met de dataset en er zijn andere benamingen van de provincies
+
+labels_verschil <- str_c(setdiff(provincies$statnaam, id_labels$region), collapse = ', ')
+
+#labels van de provincies corrigeren
+
+provincies <- provincies%>%mutate(
+  
+  #nieuwe variabele maken waar de naam matcht met de andere dataset
+  Provincie = replace(statnaam, statnaam == 'Fryslân', "Friesland"),
+  Provincie = replace(Provincie, statnaam == 'Noord-Brabant', "Brabant"))%>%
+  
+  #haal de oude ID variabele weg
+  select(!id)%>%
+
+  #voeg de correcte toe op basis van region
+  left_join(id_labels, by = join_by('Provincie' == "region"))
+
+```
+
+
+```{r geo plot, fig.width= 8, fig.height= 7, echo = F}
+
+# parameters voor kleuren palette, word geinterpoleerd naar continue schaal 
+n_green <- 20*1.3
+n_heat <- 6*1.3
+cut_green_end <- ceiling(n_green * .4)
+cut_heat <- ceiling(n_heat * .2)
+
+
+pal_3mins <- c(rev(brewer.pal(n_green, 'Greens')[-cut_green_end]),heat.colors(n_heat, rev = TRUE)[-cut_heat])%>%suppressWarnings()
+
+prov_changes_text_col <- c('black', 'black')
+
+
+# Data formateren naar perioden
+data_changes <- data_imp %>%
+  mutate(periode = case_when(
+    jaar %in% 2005:2014 ~ '2005-14',
+    jaar %in% 2015:2017 ~ '2015-17',
+    jaar == 2018 ~ '2018',
+    jaar == 2019 ~ '2019'
+  )) %>%
+  group_by(dagdeel, Provincie, periode) %>%
+  summarise(aanrijtijd = mean(aanrijtijd, na.rm = TRUE), .groups = 'drop') %>%
+  arrange(periode, dagdeel, Provincie) %>%
+  group_by(dagdeel, Provincie) %>%
+  
+  #Bereken het verschil in minuten tov de vorige periode (per provincie en dagdeel)
+  
+  mutate(change_in_levels = floor(aanrijtijd - lag(aanrijtijd)),
+         change_in_levels = replace(change_in_levels, change_in_levels == 0, NA)) %>%
+  left_join(provincies, by = "Provincie")
+
+
+
+# Plotting
+ggplot(data_changes) +
+  # OGeo map met gemiddelde aanrijtijd
+  geom_sf(aes(fill = aanrijtijd, geometry = geometry), color = "black") +
+  
+  # custom color scale, alternatief kan viridis zijn direction -1
+  scale_fill_gradientn(colors = pal_3mins, labels = ~gsub(',','-',.)) +
+  
+  # Voeg de verandering in minuten toe (ten opzichte van de vorige periode)
+  geom_sf_text(aes(label = ifelse(change_in_levels > 0, str_c('+',change_in_levels),change_in_levels),
+                   geometry = geometry, col = ifelse(change_in_levels > 0, 'red', 'white')),
+               size = 2.5, hjust = 0.5, vjust = 0.5, show.legend = FALSE, alpha = .6, check_overlap = T) +
+  
+  # Faceting bij `dagdeel` en `periode`
+  facet_grid(rows = vars(fct(dagdeel, c('dag', 'avond', 'nacht'))),
+             cols = vars(periode), switch = 'y') +
+  scale_color_manual(values = prov_changes_text_col)+
+  # Add labels en theme
+  labs(title = "Gemiddelde aanrijtijd per provincie", fill = 'minuten') +
+  theme_void() +
+  
+  theme(plot.title = element_text(hjust = 0, margin = margin(t = .25, b = 0.25, unit = 'cm')),
+        strip.text = element_text(hjust = 0.5, size = 10, margin = margin(t = .25, b = 0.25, unit = 'cm')),
+        legend.position = 'top') + 
+  guides(
+    fill = guide_colorbar(
+      barwidth = unit(10, 'cm'),
+      barheight = unit(.25, 'cm'),
+      title.position = 'top',
+      frame.colour = 'black'
+    )
+  )
+
+
+```
+De probleemstelling dat er lagere responstijden zijn in 2018 en 2019 sluit niet aan bij dit beeld. De tragere provincies zijn in 2018 en 2019 juist bijgetrokken. Flevoland is in 2019 overdag nog altijd boven de drempelwaarde van 15 minuten, maar er is een licht dalende trend zichtbaar vanaf 2015. Slechts enkele provincies zijn in 2019 dicht tegen de drempelwaarde gekomen: Gelderland en Drenthe zijn overdag beide op de grens. Aldus zijn Gelderland en Drenthe vooralsnog een aandachtpunt voor mobiliteit in ambulancezorg. 
+
+
+```{r dataset sectorkompas laden, include= FALSE}
+
+data_sector <- load_git_files(repos, filenames = 'datasector_RAV2019.csv', token = token, csv_delimiter = ',')
+
+# script voor het parsen van data uit het pdf rapport, importeer door de ondersteaande twee regels te runnen
+
+# save_git_files(repos,'sectorkompas_data_import.R', token = token, save_dir = getwd())
+# file.edit('sectorkompas_data_import.R')
+
+
+```
+
+\newpage
+# Data SectorKompas
+Aanrijtijd is een significant onderdeel van reponsetijd, maar is in zichzelf ook afhankelijk van andere factoren zoals beschikbare ambulances, hoe vaak zij worden ingezet en het aantal standplaatsen in een regio. Om een algemeen beeld krijgen van de samenwerking van deze factoren, is er data opgehaald van een rapport opgesteld door **[SectorKompas](https://www.ambulancezorg.nl/static/upload/raw/dd0f3beb-7bed-45d3-a7b6-b5e51493726c/AZN+tabellenboek+2018+-+tabellen%2C+grafieken+en+kaarten+-+071019.pdf)**.
+
+Alle maatstaffen uit dit rapport zijn omgezet naar percentages van groei ten opzichte van het jaar 2015, en worden tegenover elkaar afgezet in de onderstaande figuur.
+
+```{r trends ambulances, standplaatsen en inzettingen, echo = FALSE, fig.width= 9, fig.height= 7}
+
+
+sector_prov <- data_sector%>%
+  group_by(Provincie, jaar)%>%
+  summarise(ambulances = sum(ambulances),
+            standplaatsen = sum(standplaatsen),
+            inzetten = sum(inzetten))%>%
+  mutate(`groei inzetten` = inzetten/inzetten[1] *100 - 100,
+         `groei standplaatsen` = standplaatsen/standplaatsen[1]*100 - 100,
+         `groei ambulances` = ambulances/ambulances[1]*100 - 100,
+         landdeel = case_when(
+    Provincie %in% c("Friesland", "Drenthe", "Groningen", "Overijssel") ~ "Noord",
+    Provincie %in% c("Noord Holland", "Flevoland", "Gelderland", "Utrecht") ~ "Midden",
+    Provincie %in% c("Zuid Holland", "Brabant", "Zeeland", "Limburg") ~ "Zuid"
+  ))
+
+
+#volgorde Noord Midden Zuid Nederland (per 4)  
+facet_order <- c("Friesland", 'Drenthe', 'Groningen', 'Overijssel', 'Noord Holland', 'Flevoland', 'Gelderland', 'Utrecht', "Zuid Holland", 'Brabant', 'Zeeland', 'Limburg')
+
+# plot de trends van ambulances, standplaatsen en inzetten
+
+#formateer de data naar provincie en jaar zodat het met SektorKompas data matcht
+
+df_aanrijtijd <- data_imp%>%
+  #alleen data van 2015 tot 2019 meenemen
+  filter(jaar %in% 2015:2019)%>%
+  group_by(jaar,Provincie)%>%
+  arrange(jaar,Provincie)%>%
+  summarise(aanrijtijd = mean(aanrijtijd))%>%
+  ungroup()%>%
+  arrange(Provincie, jaar)%>%
+  group_by(Provincie)%>%
+  mutate(`groei aanrijtijd` = aanrijtijd/aanrijtijd[1]*100 - 100)%>%
+  #provincie namen aanpassen om te joinen
+  mutate(Provincie = replace(Provincie, Provincie == 'Noord-Holland', 'Noord Holland'))%>%
+  mutate(Provincie = replace(Provincie, Provincie == 'Zuid-Holland', 'Zuid Holland'))
+
+# Join de aanrijtijden van Devise dataset en SektorCompas
+sector_prov <- sector_prov%>%
+  left_join(df_aanrijtijd)
+
+# transponeren
+  sector_long <- sector_prov%>%
+    pivot_longer(cols = contains('groei'), names_to = 'trend', values_to = 'groei')%>%
+    mutate(trend = gsub('groei ', '', trend))
+  
+  # Visualiseren
+    ggplot(sector_long,aes(x = as.character(jaar), y = groei, group = trend, col = trend))+
+  geom_line()+
+      geom_point(size = .75, alpha = .4)+
+      geom_hline(yintercept = 0, lty = 2, alpha = .3)+
+  facet_wrap(~fct(Provincie, levels = facet_order))+
+  scale_y_continuous(labels = ~ percent(.,scale = 1), breaks = seq(-25,25,5))+
+    scale_color_manual(values = c('blue', 'orange', 'brown', 'black'), breaks=c('standplaatsen', 'ambulances', 'inzetten', 'aanrijtijd'))+
+    scale_x_discrete(labels = ~str_sub(., 3 ,4))+
+    theme_bw()+
+      labs(x = 'jaar', title = "RAZ trends tussen 2015-2019", col = '', caption = 'Rijen zijn gesorteerd in drie delen: Noord, Midden en Zuid')
+
+```
+Inzet ambulances, aantal standplaatsen & aantal ambulances.
+Voor bijna alle provincies is te zien dat het aantal ambulance inzetten stijgt. Flevoland is daarin het hardste gegroeid. In het midden van het land zijn het aantal standplaatsen weinig veranderd. In het zuiden zijn er relatief veel standplaatsen bijgekomen, voornamelijk in Brabant. Alleen in Drenthe is het aantal standplaatsen afgenomen. Het aantal ambulances kan een belangrijke rol hebben in periodes waar veel ongevallen op hetzelfde tijdstip voorkomen. Een parralel met de groei in aanrijtijden is in dit beeld niet prominent. 
+
+Aanvullende vraagstukken voor nader onderzoek zijn de bereikbaarheid van standpunten, het aantal incidenten per regio, onderscheid tussen gradaties van spoed (A1, A2 en B)
+
+
+
+
+
+
+```{r lm niet af, include=FALSE}
+
+# sbt <- sector_prov %>% select(-c(aanrijtijd, ambulances, inzetten, standplaatsen))%>%
+#   rename_at(vars(contains('groei')), ~ gsub('groei ', '', .))%>%
+#   select(aanrijtijd, ambulances, inzetten, standplaatsen, Provincie, landdeel, jaar)%>%ungroup
+# 
+# 
+# library(GGally)
+# ggpairs(sbt%>%select(!c(Provincie, landdeel)))
+# 
+# 
+# df <- sbt%>%
+#   mutate_at(vars(jaar, Provincie, landdeel), as.factor)
+# 
+# library(lme4)
+# 
+# # Fitting a multilevel model
+# model <- lmer(aanrijtijd ~ inzetten + standplaatsen + ambulances + (1 | Provincie) + (jaar), data = df)
+# 
+# # Install and load sjPlot if you haven't already
+# #install.packages("sjPlot")
+# library(sjPlot)
+# 
+# # Visualizing fixed effects
+# plot_model(model, type = "est", show.values = TRUE, show.p = TRUE, title = "Fixed Effects Estimates")
+# 
+# 
+# plot_model(model, type = "resid", show.values = TRUE, show.p = TRUE, title = "Fixed Effects Estimates")
+
+ 
+```
+
+```{r turn on warnings and messages, include= FALSE}
+knitr::opts_chunk$set(message = TRUE, warning = TRUE, include = FALSE)
+```
+
+
+
