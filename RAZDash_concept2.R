@@ -179,23 +179,36 @@ ui <- bs4DashPage(
     text-align: center;
   }
 ")),
-    
     useShinyjs(),  # Initialize shinyjs to enable JS functions
     bs4TabItems(
       bs4TabItem(tabName = "home",
                  fluidRow(
                    # Introduction and Welcome Section
-                   box(title = "Welcome to My Data Analytics Portfolio", 
-                       status = "primary", 
-                       solidHeader = TRUE, 
-                       width = 12,
-                       tags$div(
-                         tags$p("Hi, I'm Andy Sibov, a passionate Data Analyst with expertise in transforming raw data into meaningful insights. 
-                 My portfolio showcases my journey through various projects and my diverse skill set in the world of data analytics."),
-                         tags$p("In this portfolio (made in R Shiny), you'll find interactive projects, dashboards, and examples of my work with R. 
-                 Please feel free to explore the sections on projects, skills, resume, and contact information."),
-                         tags$strong("Let's dive in!")
+                   box(
+                     title = "Welcome to My Data Analytics Portfolio",
+                     status = "primary",
+                     solidHeader = TRUE,
+                     width = 12,
+                     fluidRow(
+                       column(
+                         width = 4,
+                         tags$img(
+                           src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/kantoorfoto2_opt.jpg",
+                           height = "300px",
+                           style = "display: block; margin-left: auto; margin-right: auto;"
+                         )
+                       ),
+                       column(
+                         width = 8,
+                         tags$div(
+                           tags$p("Welcome, I'm Andy Sibov, a passionate Data Analyst with expertise in transforming raw data into meaningful insights. 
+                My portfolio showcases my journey through various projects and my diverse skill set in the world of data analytics."),
+                           tags$p("In this portfolio (made in R Shiny), you'll find interactive projects, dashboards, and examples of my work with R. 
+                Please feel free to explore the sections on projects, skills, resume, and contact information."),
+                           tags$strong("Let's dive in!")
+                         )
                        )
+                     )
                    ),
                    
                    # Project, Skills, and Contact Highlight Section
@@ -212,14 +225,68 @@ ui <- bs4DashPage(
                             )
                      ),
                      column(4, 
-                            box(title = "Skills Overview", status = "primary", solidHeader = TRUE, width = 12,
-                                tags$p("Here are some of the tools and technologies I work with:"),
-                                tags$ul(
-                                  tags$li(tags$strong("R and Python"), ": Advanced Data Analysis and Machine Learning."),
-                                  tags$li(tags$strong("SQL and Databases"), ": Database design, querying, and optimization."),
-                                  tags$li(tags$strong("Data Visualization"), ": ggplot2, Plotly, Shiny Dashboards.")
+                            box(
+                              title = "Skills Overview",
+                              status = "primary",
+                              solidHeader = TRUE,
+                              width = 12,
+                              tags$p("Here are some of the tools and technologies I work with:"),
+                              tags$div(
+                                style = "display: flex; flex-wrap: wrap; justify-content: space-around;",
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/R_Project_logo.jpeg", height = "60px")
                                 ),
-                                actionButton("see_skills", "See My Skills", class = "btn-primary", icon = icon("tools"))
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/Python_logo.png", height = "60px")
+                                ),
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/Excel_logo.png", height = "40px")
+                                ),
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/sql.png", height = "35px")
+                                ),
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/Github_logo.png", height = "50px"),
+                                  tags$p('GitHub')
+                                ),
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/agile.png", height = "50px"),
+                                  tags$p('Agile')
+                                ),
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/jira.png", height = "50px"),
+                                  tags$p('Jira')
+                                ),
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/Presentation_logo.png", height = "40px"),
+                                  tags$p('Presenting')
+                                ),
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/Automate.png", height = "55px"),
+                                  tags$p('Automating')
+                                ),
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/Data_analysis.jpg", height = "40px"),
+                                  tags$p('Analysis')
+                                ),
+                                tags$div(
+                                  style = "margin: 15px; text-align: center;",
+                                  tags$img(src = "https://raw.githubusercontent.com/AndySibov/portfolio/main/images/pred_model.png", height = "40px"),
+                                  tags$p('Modeling')
+                                )
+                                # Add more skill divs as needed
+                              ),
+                              actionButton("see_skills", "See My Skills", class = "btn-primary", icon = icon("tools"))
                             )
                      ),
                      column(4, 
@@ -229,31 +296,8 @@ ui <- bs4DashPage(
                                 actionButton("see_contact", "Get in Touch", class = "btn-primary", icon = icon("envelope"))
                             )
                      )
-                   ),
-                   
-                   # Optional Image/Graphic section
-                   fluidRow(
-                     column(12, 
-                            box(
-                              title = NULL, status = "info", solidHeader = TRUE, width = 12,
-                              tags$div(
-                                tags$img(src = "path_to_your_image_or_logo.png", height = "200px", align = "center"),
-                                tags$p(tags$em("Image Caption: A logo or image representing your brand or field of work"), style = "text-align: center;")
-                              )
-                            )
-                     )
-                   ),
-                   
-                   # Motivational Quote or Professional Motto
-                   fluidRow(
-                     column(12,
-                            box(
-                              title = NULL, status = "success", solidHeader = TRUE, width = 12,
-                              tags$h4(tags$em("“Data is a precious thing and will last longer than the systems themselves.” – Tim Berners-Lee"), 
-                                      style = "text-align: center; font-style: italic;")
-                            )
-                     )
                    )
+                   # more elements
                  )
       ),
       bs4TabItem(tabName = "projects",
@@ -275,18 +319,18 @@ ui <- bs4DashPage(
                                                                 options = list(`actions-box` = TRUE)
                                                     ),
                                                     pickerInput("soort", "Select Soort:",
-                                                                choices = unique(df_2022$soort),
-                                                                selected = 'Respons',
+                                                                choices = unique(df_2022_vr$soort),
+                                                                selected = 'Aanrijden',
                                                                 multiple = FALSE,
                                                                 options = list(`actions-box` = TRUE)
                                                     ),
                                                     pickerInput("urgentie", "Select Urgentie:",
-                                                                choices = unique(df_2022$urgentie),
+                                                                choices = unique(df_2022_vr$urgentie),
                                                                 selected = 'A1',
                                                                 multiple = TRUE
                                                     ),
                                                     pickerInput("indeling_urgentie", "Indeling Urgentie:",
-                                                                choices = unique(df_2022$indeling_urgentie),
+                                                                choices = unique(df_2022_vr$indeling_urgentie),
                                                                 selected = 'alle inzetten',
                                                                 multiple = TRUE
                                                     ),
